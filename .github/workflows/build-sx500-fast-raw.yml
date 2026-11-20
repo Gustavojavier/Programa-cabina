@@ -1,0 +1,112 @@
+name: Build SX500IS 1.00D lean CHDK test package
+
+on:
+  push:
+    branches:
+      - sx500-fast-raw
+    paths:
+      - "config/localbuildconf.inc"
+      - ".github/workflows/build-sx500-fast-raw.yml"
+      - "docs/BUILD_AND_INSTALL.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Install host build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential make zip unzip curl bzip2 libncurses5 libtinfo5
+
+      - name: Install supported ARM bare-metal toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOOLCHAIN_URL="https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-x86_64-linux.tar.bz2"
+          curl --fail --location --retry 3 "$TOOLCHAIN_URL" -o "$RUNNER_TEMP/arm-gcc.tar.bz2"
+          tar -xjf "$RUNNER_TEMP/arm-gcc.tar.bz2" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gcc-arm-none-eabi-10.3-2021.10/bin" >> "$GITHUB_PATH"
+          arm-none-eabi-gcc --version
+
+      - name: Fetch pinned CHDK source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHDK_COMMIT="3d8aa1082ed57a04efa556103e49da751ba1e44c"
+          git init CHDK
+          git -C CHDK remote add origin https://github.com/eoschdk/trunk.git
+          git -C CHDK fetch --depth=1 origin "$CHDK_COMMIT"
+          git -C CHDK checkout --detach FETCH_HEAD
+          git -C CHDK rev-parse HEAD | tee source-commit.txt
+          test -f CHDK/Makefile
+          test -f CHDK/platform/sx500is/sub/100d/makefile.inc
+          test -f CHDK/platform/sx500is/sub/100c/capt_seq.c
+          grep -q 'firmware_100d_crc32' CHDK/platform/sx500is/sub/100c/firmware_crc_data.h
+
+      - name: Apply conservative SX500 profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp config/localbuildconf.inc CHDK/localbuildconf.inc
+          echo "Pinned source commit: $(cat source-commit.txt)"
+          echo "Target: PLATFORM=sx500is PLATFORMSUB=100d"
+
+      - name: Compile camera-specific package
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -C CHDK PLATFORM=sx500is PLATFORMSUB=100d clean firzipsubcomplete
+          find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*.zip' -print
+          test -n "$(find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*-full_BETA.zip' -print -quit)"
+
+      - name: Validate package contents and record checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          FULL_ZIP="$(find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*-full_BETA.zip' -print -quit)"
+          SMALL_ZIP="$(find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*_BETA.zip' ! -name '*-full_BETA.zip' -print -quit)"
+          test -n "$FULL_ZIP"
+          test -n "$SMALL_ZIP"
+          python3 - "$FULL_ZIP" <<'PY'
+          import sys, zipfile
+          path = sys.argv[1]
+          with zipfile.ZipFile(path) as z:
+              names = set(z.namelist())
+              assert "DISKBOOT.BIN" in names, "DISKBOOT.BIN missing"
+              assert any(n.startswith("CHDK/MODULES/") for n in names), "CHDK modules missing"
+              assert not any(n.upper() in {"PS.FI2", "PS.FIR"} for n in names), "Unexpected firmware-update image"
+          print("Validated SD-card package: DISKBOOT.BIN + CHDK modules; no PS.FI2/PS.FIR.")
+          PY
+          cp "$FULL_ZIP" dist/CHDK_SX500IS_100D_LEAN_TEST_FULL.zip
+          cp "$SMALL_ZIP" dist/CHDK_SX500IS_100D_LEAN_TEST_SMALL.zip
+          {
+            echo "Camera: Canon PowerShot SX500 IS"
+            echo "Canon firmware target: 1.00D"
+            echo "CHDK platform: sx500is / 100d"
+            echo "CHDK source repository: https://github.com/eoschdk/trunk"
+            echo "Pinned source commit: $(cat source-commit.txt)"
+            echo "Toolchain: GNU Arm Embedded 10.3-2021.10"
+            echo "Build profile: optional components trimmed; Canon AF/capture path unchanged"
+            echo "DNG: not enabled/claimed; port notes say DNG calibration is incomplete"
+            echo "JPEG: retained"
+            echo "This is an untested beta camera build. Test on a backed-up SD card only."
+          } > dist/BUILD_INFO.txt
+          sha256sum dist/* > dist/SHA256SUMS.txt
+
+      - name: Upload install test packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: CHDK-SX500IS-100D-LEAN-TEST
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
