@@ -68,15 +68,15 @@ jobs:
           set -euo pipefail
           make -C CHDK PLATFORM=sx500is PLATFORMSUB=100d clean firzipsubcomplete
           find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*.zip' -print
-          test -n "$(find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*-full_BETA.zip' -print -quit)"
+          test -n "$(find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*-full*.zip' -print -quit)"
 
       - name: Validate package contents and record checksums
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          FULL_ZIP="$(find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*-full_BETA.zip' -print -quit)"
-          SMALL_ZIP="$(find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*_BETA.zip' ! -name '*-full_BETA.zip' -print -quit)"
+          FULL_ZIP="$(find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*-full*.zip' -print -quit)"
+          SMALL_ZIP="$(find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*.zip' ! -name '*-full*.zip' -print -quit)"
           test -n "$FULL_ZIP"
           test -n "$SMALL_ZIP"
           python3 - "$FULL_ZIP" <<'PY'
