@@ -34,7 +34,7 @@ jobs:
           TOOLCHAIN_URL="https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu-rm/10.3-2021.10/gcc-arm-none-eabi-10.3-2021.10-x86_64-linux.tar.bz2"
           curl --fail --location --retry 3 "$TOOLCHAIN_URL" -o "$RUNNER_TEMP/arm-gcc.tar.bz2"
           tar -xjf "$RUNNER_TEMP/arm-gcc.tar.bz2" -C "$RUNNER_TEMP"
-          TOOLCHAIN_BIN="$(find "$RUNNER_TEMP" -type f -name arm-none-eabi-gcc -print -quit | xargs dirname)"
+          TOOLCHAIN_BIN="$(find "$RUNNER_TEMP" -name arm-none-eabi-gcc -print -quit | xargs dirname)"
           test -x "$TOOLCHAIN_BIN/arm-none-eabi-gcc"
           echo "$TOOLCHAIN_BIN" >> "$GITHUB_PATH"
           "$TOOLCHAIN_BIN/arm-none-eabi-gcc" --version
