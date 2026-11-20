@@ -66,6 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p CHDK/bin
           make -C CHDK PLATFORM=sx500is PLATFORMSUB=100d clean firzipsubcomplete
           find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*.zip' -print
           test -n "$(find CHDK/bin -maxdepth 1 -type f -name 'sx500is-100d-*-full*.zip' -print -quit)"
